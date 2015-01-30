@@ -25,19 +25,19 @@ func main() {
 
 	in, err := getInput()
 	if err != nil {
-		log.Printf("error: %s", err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
 	}
 
 	out, err := getOutput()
 	if err != nil {
-		log.Printf("error: %s", err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
 	}
 
 	tmpl, err := getTemplate()
 	if err != nil {
-		log.Printf("error: %s", err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
 	}
 
@@ -69,7 +69,7 @@ func getInput() (io.Reader, error) {
 	}
 	in, err := os.Open(*inputName)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("could not open file %q for reading: %s", *inputName, err))
+		return nil, fmt.Errorf("could not open file %q for reading: %s", *inputName, err)
 	}
 	return in, nil
 }
@@ -80,7 +80,7 @@ func getOutput() (io.Writer, error) {
 	}
 	out, err := os.OpenFile(*outputName, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("could not open file %q for writing: %s", *outputName, err))
+		return nil, fmt.Errorf("could not open file %q for writing: %s", *outputName, err)
 	}
 	return out, nil
 }
