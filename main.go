@@ -19,6 +19,7 @@ var (
 	outputName = flag.String("o", "", "output filename")
 )
 
+
 func main() {
 	flag.Parse()
 
@@ -34,13 +35,32 @@ func main() {
 		os.Exit(127)
 	}
 
-	tmpl, err := mustache.ParseFile(*tmplName)
+	tmpl, err := getTemplate()
 	if err != nil {
-		log.Printf("could not parse template %s: %s", *tmplName, err)
+		log.Printf("error: %s", err)
 		os.Exit(127)
 	}
 
 	expand(in, out, tmpl)
+}
+
+func getTemplate() (*mustache.Template, error) {
+	if *tmplName == "" && flag.NArg() == 0 {
+		return nil, errors.New("you must supply a template or -t")
+	}
+	if *tmplName == "" {
+		tmpl, err := mustache.ParseString(flag.Arg(0))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse template %q: %s", flag.Arg(0), err)
+		}
+		return tmpl, nil
+	}
+
+	tmpl, err := mustache.ParseFile(*tmplName)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse template file %q: %s", *tmplName, err)
+	}
+	return tmpl, nil
 }
 
 func getInput() (io.Reader, error) {
