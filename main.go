@@ -16,9 +16,9 @@ import (
 var (
 	inputName = flag.String("i", "", "input filename")
 	tmplName = flag.String("t", "", "template filename")
+	tmplXpn = flag.String("tx", "", "template filename expansion")
 	outputName = flag.String("o", "", "output filename")
 )
-
 
 func main() {
 	flag.Parse()
@@ -35,7 +35,7 @@ func main() {
 		os.Exit(127)
 	}
 
-	tmpl, err := getTemplate()
+	tmpl, err := getTemplateFactory()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
@@ -44,28 +44,9 @@ func main() {
 	expand(in, out, tmpl)
 }
 
-func getTemplate() (*mustache.Template, error) {
-	if *tmplName == "" && flag.NArg() == 0 {
-		return nil, errors.New("you must supply a template or -t")
-	}
-	if *tmplName == "" {
-		tmpl, err := mustache.ParseString(flag.Arg(0))
-		if err != nil {
-			return nil, fmt.Errorf("could not parse template %q: %s", flag.Arg(0), err)
-		}
-		return tmpl, nil
-	}
-
-	tmpl, err := mustache.ParseFile(*tmplName)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse template file %q: %s", *tmplName, err)
-	}
-	return tmpl, nil
-}
-
 func getInput() (io.Reader, error) {
 	if *inputName == "" {
-		return os.Stdin, nil
+				return os.Stdin, nil
 	}
 	in, err := os.Open(*inputName)
 	if err != nil {
@@ -85,7 +66,70 @@ func getOutput() (io.Writer, error) {
 	return out, nil
 }
 
-func expand(in io.Reader, out io.Writer, tmpl *mustache.Template) error {
+func getTemplateFactory() (templateFactory, error) {
+	if *tmplName == "" && *tmplXpn == "" && flag.NArg() == 0 {
+		return nil, errors.New("you must supply a template or -t")
+	}
+	if *tmplName != "" && *tmplXpn != "" {
+		return nil, fmt.Errorf("-t and -tx are mutually exclusive")
+	}
+	if *tmplName == "" && *tmplXpn == "" {
+		tmpl, err := mustache.ParseString(flag.Arg(0))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse template %q: %s", flag.Arg(0), err)
+		}
+		return &staticTemplateFactory{tmpl}, nil
+	}
+
+	if *tmplName != "" {
+		tmpl, err := mustache.ParseFile(*tmplName)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse template file %q: %s", *tmplName, err)
+		}
+		return &staticTemplateFactory{tmpl}, nil
+	}
+
+	fnTmpl, err := mustache.ParseString(*tmplXpn)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse template path template %q: %s", *tmplXpn, err)
+	}
+	return &dynamicTemplateFactory{fnTmpl: fnTmpl}, nil
+}
+
+// Nasty mechanisms to manage templates
+type templateFactory interface {
+	getTemplate(xpn map[string]interface{}) (*mustache.Template, error)
+}
+
+type staticTemplateFactory struct {
+	tmpl *mustache.Template
+}
+
+func (stf *staticTemplateFactory)getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+	return stf.tmpl, nil
+}
+
+type dynamicTemplateFactory struct {
+	fnTmpl *mustache.Template // filename template
+	fn string // path to current template
+	tmpl *mustache.Template // current template
+}
+
+func (dtf *dynamicTemplateFactory)getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+	fn := dtf.fnTmpl.Render(xpn)
+	if fn == dtf.fn {
+		return dtf.tmpl, nil
+	}
+	tmpl, err := mustache.ParseFile(fn)
+	if err != nil {
+		return nil, err
+	}
+	dtf.tmpl = tmpl
+	return tmpl, nil
+}
+
+// expand combines JSON input with templates to produce output.
+func expand(in io.Reader, out io.Writer, tmplFact templateFactory) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -95,11 +139,17 @@ func expand(in io.Reader, out io.Writer, tmpl *mustache.Template) error {
 			}
 			return err
 		}
-		out.Write([]byte(tmpl.Render(getExpn(j))))
+		xpn := getExpn(j)
+		tmpl, err := tmplFact.getTemplate(xpn)
+		if err != nil {
+			return err
+		}
+		out.Write([]byte(tmpl.Render(xpn)))
 		out.Write([]byte("\n"))
 	}
 }
 
+// getExpn transforms various JSON datatypes into mustache expansion dictionaries.
 func getExpn(j interface{}) map[string]interface{} {
 	switch j.(type) {
 	case map[string]interface{}:
