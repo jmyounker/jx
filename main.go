@@ -19,6 +19,7 @@ var (
 	tmplXpn    = flag.String("tx", "", "template filename expansion")
 	outputName = flag.String("o", "", "output filename")
 	outputXpn  = flag.String("ox", "", "output filename expansion")
+	append     = flag.Bool("a", false, "append to file")
 )
 
 func main() {
@@ -67,7 +68,7 @@ func getOutputFactory() (writerFactory, error) {
 		return nil, fmt.Errorf("-o and -ox are mutally exclusive")
 	}
 	if *outputName != "" {
-		out, err := os.OpenFile(*outputName, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+		out, err := openFile(*outputName, *append)
 		if err != nil {
 			return nil, fmt.Errorf("could not open file %q for writing: %s", *outputName, err)
 		}
@@ -77,7 +78,7 @@ func getOutputFactory() (writerFactory, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not parse output path template %q: %s", *tmplXpn, err)
 	}
-	return &dynamicWriterFactory{fnTmpl: fnTmpl}, nil
+	return &dynamicWriterFactory{fnTmpl: fnTmpl, append: *append}, nil
 }
 
 func getTemplateFactory() (templateFactory, error) {
@@ -125,6 +126,7 @@ func (f *staticWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer, 
 
 type dynamicWriterFactory struct {
 	fnTmpl *mustache.Template // filename template
+	append bool				  // append to file rather than truncate
 	fn     string             // path to current template
 	writer *os.File           // current writer
 }
@@ -137,12 +139,22 @@ func (f *dynamicWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer,
 	if f.writer != nil {
 		f.writer.Close()
 	}
-	writer, err := os.OpenFile(fn, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+	writer, err := openFile(fn, f.append)
 	if err != nil {
 		return nil, err
 	}
+	f.fn = fn
 	f.writer = writer
 	return writer, nil
+}
+
+// extracted for cleanliness
+func openFile(fn string, append bool) (*os.File, error) {
+	md := os.O_TRUNC
+	if append {
+		md = os.O_APPEND
+	}
+	return os.OpenFile(fn, md|os.O_CREATE|os.O_WRONLY, 0666)
 }
 
 // templateFactory allows choosing templates based on the JSON input
