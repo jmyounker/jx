@@ -26,7 +26,8 @@ func TestExpandInput(t *testing.T) {
 		tmpl, err := mustache.ParseString(tc.tmpl)
 		assertNoError(t, err)
 		out := bytes.Buffer{}
-		assertNoError(t, expand(in, &out, &staticTemplateFactory{tmpl}))
+		outFact := &staticWriterFactory{&out}
+		assertNoError(t, expand(in, outFact, &staticTemplateFactory{tmpl}))
 		if (out.String() != tc.want) {
 			t.Fatalf("Expected %q but got %q", tc.want, out.String())
 		}

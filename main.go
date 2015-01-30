@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	inputName = flag.String("i", "", "input filename")
-	tmplName = flag.String("t", "", "template filename")
-	tmplXpn = flag.String("tx", "", "template filename expansion")
+	inputName  = flag.String("i", "", "input filename")
+	tmplName   = flag.String("t", "", "template filename")
+	tmplXpn    = flag.String("tx", "", "template filename expansion")
 	outputName = flag.String("o", "", "output filename")
+	outputXpn  = flag.String("ox", "", "output filename expansion")
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 		os.Exit(127)
 	}
 
-	out, err := getOutput()
+	out, err := getOutputFactory()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
@@ -41,12 +42,15 @@ func main() {
 		os.Exit(127)
 	}
 
-	expand(in, out, tmpl)
+	if err := expand(in, out, tmpl); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 func getInput() (io.Reader, error) {
 	if *inputName == "" {
-				return os.Stdin, nil
+		return os.Stdin, nil
 	}
 	in, err := os.Open(*inputName)
 	if err != nil {
@@ -55,15 +59,25 @@ func getInput() (io.Reader, error) {
 	return in, nil
 }
 
-func getOutput() (io.Writer, error) {
-	if *outputName == "" {
-		return os.Stdout, nil
+func getOutputFactory() (writerFactory, error) {
+	if *outputName == "" && *outputXpn == "" {
+		return &staticWriterFactory{os.Stdout}, nil
 	}
-	out, err := os.OpenFile(*outputName, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+	if *outputName != "" && *outputXpn != "" {
+		return nil, fmt.Errorf("-o and -ox are mutally exclusive")
+	}
+	if *outputName != "" {
+		out, err := os.OpenFile(*outputName, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+		if err != nil {
+			return nil, fmt.Errorf("could not open file %q for writing: %s", *outputName, err)
+		}
+		return &staticWriterFactory{out}, nil
+	}
+	fnTmpl, err := mustache.ParseString(*outputXpn)
 	if err != nil {
-		return nil, fmt.Errorf("could not open file %q for writing: %s", *outputName, err)
+		return nil, fmt.Errorf("could not parse output path template %q: %s", *tmplXpn, err)
 	}
-	return out, nil
+	return &dynamicWriterFactory{fnTmpl: fnTmpl}, nil
 }
 
 func getTemplateFactory() (templateFactory, error) {
@@ -96,7 +110,42 @@ func getTemplateFactory() (templateFactory, error) {
 	return &dynamicTemplateFactory{fnTmpl: fnTmpl}, nil
 }
 
-// Nasty mechanisms to manage templates
+// writerFactory allows choosing output sources based on the JSON input
+type writerFactory interface {
+	getWriter(xpn map[string]interface{}) (io.Writer, error)
+}
+
+type staticWriterFactory struct {
+	writer io.Writer
+}
+
+func (f *staticWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer, error) {
+	return f.writer, nil
+}
+
+type dynamicWriterFactory struct {
+	fnTmpl *mustache.Template // filename template
+	fn     string             // path to current template
+	writer *os.File           // current writer
+}
+
+func (f *dynamicWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer, error) {
+	fn := f.fnTmpl.Render(xpn)
+	if fn == f.fn {
+		return f.writer, nil
+	}
+	if f.writer != nil {
+		f.writer.Close()
+	}
+	writer, err := os.OpenFile(fn, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return nil, err
+	}
+	f.writer = writer
+	return writer, nil
+}
+
+// templateFactory allows choosing templates based on the JSON input
 type templateFactory interface {
 	getTemplate(xpn map[string]interface{}) (*mustache.Template, error)
 }
@@ -105,17 +154,17 @@ type staticTemplateFactory struct {
 	tmpl *mustache.Template
 }
 
-func (stf *staticTemplateFactory)getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
-	return stf.tmpl, nil
+func (f *staticTemplateFactory) getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+	return f.tmpl, nil
 }
 
 type dynamicTemplateFactory struct {
 	fnTmpl *mustache.Template // filename template
-	fn string // path to current template
-	tmpl *mustache.Template // current template
+	fn     string             // path to current template
+	tmpl   *mustache.Template // current template
 }
 
-func (dtf *dynamicTemplateFactory)getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+func (dtf *dynamicTemplateFactory) getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
 	fn := dtf.fnTmpl.Render(xpn)
 	if fn == dtf.fn {
 		return dtf.tmpl, nil
@@ -129,7 +178,7 @@ func (dtf *dynamicTemplateFactory)getTemplate(xpn map[string]interface{}) (*must
 }
 
 // expand combines JSON input with templates to produce output.
-func expand(in io.Reader, out io.Writer, tmplFact templateFactory) error {
+func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -140,10 +189,17 @@ func expand(in io.Reader, out io.Writer, tmplFact templateFactory) error {
 			return err
 		}
 		xpn := getExpn(j)
+
 		tmpl, err := tmplFact.getTemplate(xpn)
 		if err != nil {
 			return err
 		}
+
+		out, err := outFact.getWriter(xpn)
+		if err != nil {
+			return err
+		}
+
 		out.Write([]byte(tmpl.Render(xpn)))
 		out.Write([]byte("\n"))
 	}

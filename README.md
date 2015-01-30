@@ -68,5 +68,21 @@ You can use a template to specify the location of the template using the -tx opt
         >
 
 
+Similarly, you can use the -ox option to specify an output filename template:
+
+        > echo '{"fn": "o1"} {"fn": "o2"}' | jx -ox /tmp/{{fn}} 'this is file {{fn}}'
+        > cat /tmp/o1
+        this is file o1
+        > cat /tmp/o2
+        this is file o2
+
+
+Note that by default the -ox option overwrites the previous contents of the file:
+
+        > echo '{"fn": "o1", "a": "first"} {"fn": "o1", "a": "last"}' | jx -ox /tmp/{{fn}} 'this was written {{a}}'
+        > cat /tmp/o1
+        this was written last
+
+
 The templates are complete [mustache](https://mustache.github.io/) templates, with the full power that comes
 along with them.
