@@ -7,7 +7,7 @@ clean:
 	rm -rf usr *.pkg *.deb *.rpm
 
 build: main.go
-	go build
+	go build -ldflags "-X main.Version=$(VERSION)"
 
 pkg-deb: build
 	rm -rf usr

@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,33 +10,64 @@ import (
 	"strconv"
 
 	"github.com/hoisie/mustache"
+	"github.com/urfave/cli"
 )
 
-var (
-	inputName  = flag.String("i", "", "input filename")
-	tmplName   = flag.String("t", "", "template filename")
-	tmplXpn    = flag.String("tx", "", "template filename expansion")
-	outputName = flag.String("o", "", "output filename")
-	outputXpn  = flag.String("ox", "", "output filename expansion")
-	append     = flag.Bool("a", false, "append to file")
-)
+var Version string;
 
 func main() {
-	flag.Parse()
+	app := cli.NewApp()
+	app.Name = "jx"
+	app.Version = Version
+	app.Usage = "Uses JSON objects to expand string templates."
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "input, i",
+			Usage: "Read input from `FILE` instead of stdin",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "template, t",
+			Usage: "Read template from `FILE`",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "template-file-template, tx",
+			Usage: "Read template from expanded `FILENAME_TEMPLATE` based on the current JSON object",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "output, o",
+			Usage: "Write to `FILE` instead of stdout",
+			Value: "",
+		},
+		cli.StringFlag{
+			Name:  "output-file-template, ox",
+			Usage: "Write to expanded `FILENAME_TEMPLATE` based on the current JSON object",
+		},
+		cli.BoolTFlag{
+			Name: "append, a",
+			Usage: "Append new output to file instead of overwriting",
+		},
+	}
+	app.Action = run;
+	app.Run(os.Args)
+}
 
-	in, err := getInput()
+func run(ctx *cli.Context) error {
+	in, err := getInput(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
 	}
 
-	out, err := getOutputFactory()
+	out, err := getOutputFactory(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
 	}
 
-	tmpl, err := getTemplateFactory()
+	tmpl, err := getTemplateFactory(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(127)
@@ -47,68 +77,78 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
+	return nil
 }
 
-func getInput() (io.Reader, error) {
-	if *inputName == "" {
+func getInput(ctx *cli.Context) (io.Reader, error) {
+	if ctx.String("input") == "" {
 		return os.Stdin, nil
+	} else {
+		in, err := os.Open(ctx.String("input"))
+		if err != nil {
+			return nil, fmt.Errorf("could not open file %q for reading: %s", ctx.String("input"), err)
+		}
+		return in, nil
 	}
-	in, err := os.Open(*inputName)
-	if err != nil {
-		return nil, fmt.Errorf("could not open file %q for reading: %s", *inputName, err)
-	}
-	return in, nil
 }
 
-func getOutputFactory() (writerFactory, error) {
-	if *outputName == "" && *outputXpn == "" {
-		return &staticWriterFactory{os.Stdout}, nil
+func getOutputFactory(ctx *cli.Context) (writerFactory, error) {
+	if ctx.String("output") != "" && ctx.String("output-file-template") != "" {
+		return nil, fmt.Errorf("only one destination possible")
 	}
-	if *outputName != "" && *outputXpn != "" {
-		return nil, fmt.Errorf("-o and -ox are mutally exclusive")
-	}
-	if *outputName != "" {
-		out, err := openFile(*outputName, *append)
+	if ctx.String("output") != "" {
+		out, err := openFile(ctx.String("output"), ctx.BoolT("append"))
 		if err != nil {
-			return nil, fmt.Errorf("could not open file %q for writing: %s", *outputName, err)
+			return nil, fmt.Errorf("could not open file %q for writing: %s", ctx.String("output"), err)
 		}
 		return &staticWriterFactory{out}, nil
+	} else if (ctx.String("output-file-template") != "") {
+		fnTmpl, err := mustache.ParseString(ctx.String("output-file-template"))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse output path template %q: %s", ctx.String("output-file-template"), err)
+		}
+		return &dynamicWriterFactory{fnTmpl: fnTmpl, append: ctx.BoolT("append")}, nil
+	} else {
+		return &staticWriterFactory{os.Stdout}, nil
 	}
-	fnTmpl, err := mustache.ParseString(*outputXpn)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse output path template %q: %s", *tmplXpn, err)
-	}
-	return &dynamicWriterFactory{fnTmpl: fnTmpl, append: *append}, nil
 }
 
-func getTemplateFactory() (templateFactory, error) {
-	if *tmplName == "" && *tmplXpn == "" && flag.NArg() == 0 {
-		return nil, errors.New("you must supply a template or -t")
+func getTemplateFactory(ctx *cli.Context) (templateFactory, error) {
+	nSrc := 0
+	if (ctx.String("template") != "") {
+		nSrc += 1
 	}
-	if *tmplName != "" && *tmplXpn != "" {
-		return nil, fmt.Errorf("-t and -tx are mutually exclusive")
+	if (ctx.String("template-file-template") != "") {
+		nSrc += 1
 	}
-	if *tmplName == "" && *tmplXpn == "" {
-		tmpl, err := mustache.ParseString(flag.Arg(0))
+	if (ctx.NArg() > 0) {
+		nSrc += 1
+	}
+	if (nSrc == 0) {
+		return nil, errors.New("you must supply a template")
+	}
+	if (nSrc > 1) {
+		return nil, fmt.Errorf("only one template source possible")
+	}
+	if ctx.String("template") != "" {
+		tmpl, err := mustache.ParseFile(ctx.String("template"))
 		if err != nil {
-			return nil, fmt.Errorf("could not parse template %q: %s", flag.Arg(0), err)
+			return nil, fmt.Errorf("could not parse template file %q: %s", ctx.String("template"), err)
+		}
+		return &staticTemplateFactory{tmpl}, nil
+	} else if (ctx.String("template-file-template") != "") {
+		fnTmpl, err := mustache.ParseString(ctx.String("template-file-template"))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse template path template %q: %s", ctx.String("template-file-template"), err)
+		}
+		return &dynamicTemplateFactory{fnTmpl: fnTmpl}, nil
+	} else {
+		tmpl, err := mustache.ParseString(ctx.Args().Get(0))
+		if err != nil {
+			return nil, fmt.Errorf("could not parse template %q: %s", ctx.Args().Get(0), err)
 		}
 		return &staticTemplateFactory{tmpl}, nil
 	}
-
-	if *tmplName != "" {
-		tmpl, err := mustache.ParseFile(*tmplName)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse template file %q: %s", *tmplName, err)
-		}
-		return &staticTemplateFactory{tmpl}, nil
-	}
-
-	fnTmpl, err := mustache.ParseString(*tmplXpn)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse template path template %q: %s", *tmplXpn, err)
-	}
-	return &dynamicTemplateFactory{fnTmpl: fnTmpl}, nil
 }
 
 // writerFactory allows choosing output sources based on the JSON input
