@@ -260,9 +260,11 @@ func terminalForm(j interface{}) interface{} {
 	case float64:
 		return j.(float64)
 	default:
-		if j == nil {
-			return nil
+		v, err := json.Marshal(j)
+		if (err != nil) {
+			panic("Original form should have come from JSON so something is very wrong")
 		}
+		return string(v)
 		log.Fatal("Should be unreachable")
 	}
 	return nil
