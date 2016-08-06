@@ -20,6 +20,7 @@ var (
 	outputName = flag.String("o", "", "output filename")
 	outputXpn  = flag.String("ox", "", "output filename expansion")
 	append     = flag.Bool("a", false, "append to file")
+	asJson  = flag.Bool("j", false, "output as json")
 )
 
 func main() {
@@ -43,7 +44,7 @@ func main() {
 		os.Exit(127)
 	}
 
-	if err := expand(in, out, tmpl); err != nil {
+	if err := expand(in, out, tmpl, *asJson); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
@@ -190,7 +191,7 @@ func (dtf *dynamicTemplateFactory) getTemplate(xpn map[string]interface{}) (*mus
 }
 
 // expand combines JSON input with templates to produce output.
-func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error {
+func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, asJson bool) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -200,7 +201,7 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error
 			}
 			return err
 		}
-		xpn := getExpn(j)
+		xpn := getExpn(j, asJson)
 
 		tmpl, err := tmplFact.getTemplate(xpn)
 		if err != nil {
@@ -218,14 +219,18 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error
 }
 
 // getExpn transforms various JSON datatypes into mustache expansion dictionaries.
-func getExpn(j interface{}) map[string]interface{} {
+func getExpn(j interface{}, asJson bool) map[string]interface{} {
 	switch j.(type) {
 	case map[string]interface{}:
-		return j.(map[string]interface{})
+		xpn := map[string]interface{}{};
+		for k, v := range j.(map[string]interface{}) {
+			xpn[k] = terminalForm(v, asJson)
+		}
+		return xpn
 	case []interface{}:
 		xpn := map[string]interface{}{}
 		for i, v := range j.([]interface{}) {
-			xpn[strconv.Itoa(i+1)] = v
+			xpn[strconv.Itoa(i + 1)] = terminalForm(v, asJson)
 		}
 		return xpn
 	case string:
@@ -241,4 +246,16 @@ func getExpn(j interface{}) map[string]interface{} {
 		log.Fatal("Should be unreachable")
 	}
 	return nil
+}
+
+
+func terminalForm(j interface{}, asJson bool) interface{} {
+	if (!asJson) {
+		return j
+	}
+	v, err := json.Marshal(j)
+	if (err != nil) {
+		panic("Original form should have come from JSON so something is very wrong")
+	}
+	return string(v)
 }
