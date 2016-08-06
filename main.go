@@ -20,7 +20,6 @@ var (
 	outputName = flag.String("o", "", "output filename")
 	outputXpn  = flag.String("ox", "", "output filename expansion")
 	append     = flag.Bool("a", false, "append to file")
-	asJson  = flag.Bool("j", false, "output as json")
 )
 
 func main() {
@@ -44,7 +43,7 @@ func main() {
 		os.Exit(127)
 	}
 
-	if err := expand(in, out, tmpl, *asJson); err != nil {
+	if err := expand(in, out, tmpl); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
@@ -191,7 +190,7 @@ func (dtf *dynamicTemplateFactory) getTemplate(xpn map[string]interface{}) (*mus
 }
 
 // expand combines JSON input with templates to produce output.
-func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, asJson bool) error {
+func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -201,7 +200,7 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, asJso
 			}
 			return err
 		}
-		xpn := getExpn(j, asJson)
+		xpn := getExpn(j)
 
 		tmpl, err := tmplFact.getTemplate(xpn)
 		if err != nil {
@@ -219,43 +218,53 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, asJso
 }
 
 // getExpn transforms various JSON datatypes into mustache expansion dictionaries.
-func getExpn(j interface{}, asJson bool) map[string]interface{} {
+func getExpn(j interface{}) map[string]interface{} {
 	switch j.(type) {
 	case map[string]interface{}:
 		xpn := map[string]interface{}{};
 		for k, v := range j.(map[string]interface{}) {
-			xpn[k] = terminalForm(v, asJson)
+			xpn[k] = terminalForm(v)
 		}
 		return xpn
 	case []interface{}:
 		xpn := map[string]interface{}{}
 		for i, v := range j.([]interface{}) {
-			xpn[strconv.Itoa(i + 1)] = terminalForm(v, asJson)
+			xpn[strconv.Itoa(i + 1)] = terminalForm(v)
 		}
 		return xpn
+	default:
+		return map[string]interface{}{"1": terminalForm(j)}
+	}
+	return nil
+}
+
+
+func terminalForm(j interface{}) interface{} {
+	switch j.(type) {
+	case map[string]interface{}:
+		v, err := json.Marshal(j)
+		if (err != nil) {
+			panic("Original form should have come from JSON so something is very wrong")
+		}
+		return string(v)
+	case []interface{}:
+		v, err := json.Marshal(j)
+		if (err != nil) {
+			panic("Original form should have come from JSON so something is very wrong")
+		}
+		return string(v)
 	case string:
-		return map[string]interface{}{"1": j.(string)}
+		return j.(string)
 	case bool:
-		return map[string]interface{}{"1": j.(bool)}
+		return j.(bool)
 	case float64:
-		return map[string]interface{}{"1": j.(float64)}
+		return j.(float64)
 	default:
 		if j == nil {
-			return map[string]interface{}{"1": nil}
+			return nil
 		}
 		log.Fatal("Should be unreachable")
 	}
 	return nil
 }
 
-
-func terminalForm(j interface{}, asJson bool) interface{} {
-	if (!asJson) {
-		return j
-	}
-	v, err := json.Marshal(j)
-	if (err != nil) {
-		panic("Original form should have come from JSON so something is very wrong")
-	}
-	return string(v)
-}

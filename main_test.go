@@ -18,6 +18,10 @@ var inputTests = []struct{in, tmpl, want string}{
 	{"true", "{{1}}", "true\n"},
 	{"42", "{{1}}", "42\n"},
 	{"null", "{{1}}", "&lt;nil&gt;\n"},
+	{"null", "{{{1}}}", "<nil>\n"},
+	{"{\"a\":[1,2]}", "{{{a}}}", "[1,2]\n"},
+	{"{\"a\":[\"b\",\"c\"]}", "{{{a}}}", "[\"b\",\"c\"]\n"},
+	{"{\"a\":{\"b\":\"c\"}}", "{{{a}}}", "{\"b\":\"c\"}\n"},
 }
 
 func TestExpandInput(t *testing.T) {
