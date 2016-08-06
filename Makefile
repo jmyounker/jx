@@ -9,6 +9,9 @@ clean:
 build: main.go
 	go build
 
+test: build
+	go test
+
 pkg-deb: build
 	rm -rf usr
 	mkdir -p usr/local/bin
