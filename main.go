@@ -215,6 +215,7 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error
 		out.Write([]byte(tmpl.Render(xpn)))
 		out.Write([]byte("\n"))
 	}
+        return nil
 }
 
 // getExpn transforms various JSON datatypes into mustache expansion dictionaries.
