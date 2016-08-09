@@ -6,11 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
-	"strconv"
 
-	"github.com/hoisie/mustache"
+	"github.com/jmyounker/mustache"
 )
 
 var (
@@ -113,14 +111,14 @@ func getTemplateFactory() (templateFactory, error) {
 
 // writerFactory allows choosing output sources based on the JSON input
 type writerFactory interface {
-	getWriter(xpn map[string]interface{}) (io.Writer, error)
+	getWriter(xpn interface{}) (io.Writer, error)
 }
 
 type staticWriterFactory struct {
 	writer io.Writer
 }
 
-func (f *staticWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer, error) {
+func (f *staticWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
 	return f.writer, nil
 }
 
@@ -131,7 +129,7 @@ type dynamicWriterFactory struct {
 	writer *os.File           // current writer
 }
 
-func (f *dynamicWriterFactory) getWriter(xpn map[string]interface{}) (io.Writer, error) {
+func (f *dynamicWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
 	fn := f.fnTmpl.Render(xpn)
 	if fn == f.fn {
 		return f.writer, nil
@@ -159,14 +157,14 @@ func openFile(fn string, append bool) (*os.File, error) {
 
 // templateFactory allows choosing templates based on the JSON input
 type templateFactory interface {
-	getTemplate(xpn map[string]interface{}) (*mustache.Template, error)
+	getTemplate(xpn interface{}) (*mustache.Template, error)
 }
 
 type staticTemplateFactory struct {
 	tmpl *mustache.Template
 }
 
-func (f *staticTemplateFactory) getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+func (f *staticTemplateFactory) getTemplate(xpn interface{}) (*mustache.Template, error) {
 	return f.tmpl, nil
 }
 
@@ -176,7 +174,7 @@ type dynamicTemplateFactory struct {
 	tmpl   *mustache.Template // current template
 }
 
-func (dtf *dynamicTemplateFactory) getTemplate(xpn map[string]interface{}) (*mustache.Template, error) {
+func (dtf *dynamicTemplateFactory) getTemplate(xpn interface{}) (*mustache.Template, error) {
 	fn := dtf.fnTmpl.Render(xpn)
 	if fn == dtf.fn {
 		return dtf.tmpl, nil
@@ -200,72 +198,18 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error
 			}
 			return err
 		}
-		xpn := getExpn(j)
-
-		tmpl, err := tmplFact.getTemplate(xpn)
+		tmpl, err := tmplFact.getTemplate(j)
 		if err != nil {
 			return err
 		}
 
-		out, err := outFact.getWriter(xpn)
+		out, err := outFact.getWriter(j)
 		if err != nil {
 			return err
 		}
 
-		out.Write([]byte(tmpl.Render(xpn)))
+		out.Write([]byte(tmpl.Render(j)))
 		out.Write([]byte("\n"))
 	}
         return nil
 }
-
-// getExpn transforms various JSON datatypes into mustache expansion dictionaries.
-func getExpn(j interface{}) map[string]interface{} {
-	switch j.(type) {
-	case map[string]interface{}:
-		xpn := map[string]interface{}{};
-		for k, v := range j.(map[string]interface{}) {
-			xpn[k] = terminalForm(v)
-		}
-		return xpn
-	case []interface{}:
-		xpn := map[string]interface{}{}
-		for i, v := range j.([]interface{}) {
-			xpn[strconv.Itoa(i + 1)] = terminalForm(v)
-		}
-		return xpn
-	default:
-		return map[string]interface{}{"1": terminalForm(j)}
-	}
-	return nil
-}
-
-
-func terminalForm(j interface{}) interface{} {
-	switch j.(type) {
-	case map[string]interface{}:
-		v, err := json.Marshal(j)
-		if (err != nil) {
-			panic("Original form should have come from JSON so something is very wrong")
-		}
-		return string(v)
-	case []interface{}:
-		v, err := json.Marshal(j)
-		if (err != nil) {
-			panic("Original form should have come from JSON so something is very wrong")
-		}
-		return string(v)
-	case string:
-		return j.(string)
-	case bool:
-		return j.(bool)
-	case float64:
-		return j.(float64)
-	default:
-		if j == nil {
-                   return j
-                }
-		log.Fatal("Should be unreachable")
-	}
-	return nil
-}
-

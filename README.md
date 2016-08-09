@@ -22,12 +22,25 @@ With arrays the element index is the substitution variable:
         index 1 is foo and index 2 is bar
         >
 
-Simple JSON types are treated as if they were one element arrays:
+Names can refer to nested elements:
 
-        > echo '"foo" 42 true' | jx '{{1}}'
+        > echo '{"foo":["bar1", "bar2"]}' | jx 'index foo.2 is {{foo.2}}'
+        index foo.2 is bar2
+        >
+
+
+Simple JSON types are simple values
+
+        > echo '"foo" 42 true' | jx '{{.}}'
         foo
         42
         true
+        >
+
+Complex types are returned as json literals
+
+        > echo '{"foo":["bar1", "bar2"]}' | jx 'foo is {{foo}}'
+        foo is ["bar1","bar2"]
         >
 
 You can read the template from a file with the -t option:

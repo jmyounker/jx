@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hoisie/mustache"
+	"github.com/jmyounker/mustache"
 )
 
 var inputTests = []struct{in, tmpl, want string}{
@@ -14,13 +14,15 @@ var inputTests = []struct{in, tmpl, want string}{
 	{"{\"a\": \"foo\"}", "{{a}}", "foo\n"},
 	{"{\"a\": \"foo\"}{\"a\":\"bar\"}", "{{a}}", "foo\nbar\n"},
 	{"[\"foo\"]", "{{1}}", "foo\n"},
-	{"\"foo\"", "{{1}}", "foo\n"},
-	{"true", "{{1}}", "true\n"},
-	{"42", "{{1}}", "42\n"},
-	{"null", "{{1}}", "&lt;nil&gt;\n"},
-	{"null", "{{{1}}}", "<nil>\n"},
+	{"\"foo\"", "{{.}}", "foo\n"},
+	{"true", "{{.}}", "true\n"},
+	{"42", "{{.}}", "42\n"},
+	{"null", "{{.}}", "\n"},
+	{"null", "{{{.}}}", "\n"},
 	{"{\"a\":[1,2]}", "{{{a}}}", "[1,2]\n"},
 	{"{\"a\":[\"b\",\"c\"]}", "{{{a}}}", "[\"b\",\"c\"]\n"},
+	{"{\"a\":[\"b\",\"c\"]}", "{{{a.1}}}", "b\n"},
+	{"{\"a\":[[\"b1\",\"b2\"],[\"c1\",\"c2\"]]}", "{{#a}}{{2}}{{/a}}", "b2c2\n"},
 	{"{\"a\":{\"b\":\"c\"}}", "{{{a}}}", "{\"b\":\"c\"}\n"},
 }
 
