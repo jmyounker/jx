@@ -1,9 +1,10 @@
 all: clean update build test
 
 PKG_VERS := github.com/jmyounker/vers
+CMD := jx
 
 clean:
-	rm -rf jx target
+	rm -rf $(CMD) target
 
 update:
 	go get
@@ -23,12 +24,19 @@ test: build
 
 set-prefix:
 ifndef PREFIX
+ifeq ($(shell uname),Darwin)
+	$(eval PREFIX := /usr/local)
+	$(eval INSTALL_USER := $(shell id -u)) 
+	$(eval INSTALL_GROUP := $(shell id -g)) 
+else
 	$(eval PREFIX := /usr)
+        $(eval INSTALL_USER := root)
+	$(eval INTALL_GROUP := root)
+endif
 endif
 
-
-install: set-prefix
-	install -m 755 -o root -g wheel jx $(PREFIX)/bin/jx
+install: set-prefix build
+	install -m 755 -o $(INSTALL_USER) -g $(INSTALL_GROUP) $(CMD) $(PREFIX)/bin/$(CMD)
 
 package-base: test
 	mkdir target
@@ -40,20 +48,20 @@ package-osx: set-version package-base
 	mkdir target/model/osx/usr
 	mkdir target/model/osx/usr/local
 	mkdir target/model/osx/usr/local/bin
-	install -m 755 jx target/model/osx/usr/local/bin/jx
-	fpm -s dir -t osxpkg -n jx -v $(VERSION) -p target/package -C target/model/osx .
+	install -m 755 $(CMD) target/model/osx/usr/local/bin/$(CMD)
+	fpm -s dir -t osxpkg -n $(CMD) -v $(VERSION) -p target/package -C target/model/osx .
 
 package-rpm: set-version package-base
 	mkdir target/model/linux-x86-rpm
 	mkdir target/model/linux-x86-rpm/usr
 	mkdir target/model/linux-x86-rpm/usr/bin
-	install -m 755 jx target/model/linux-x86-rpm/usr/bin/jx
-	fpm -s dir -t rpm -n jx -v $(VERSION) -p target/package -C target/model/linux-x86-rpm .
+	install -m 755 $(CMD) target/model/linux-x86-rpm/usr/bin/$(CMD)
+	fpm -s dir -t rpm -n $(CMD) -v $(VERSION) -p target/package -C target/model/linux-x86-rpm .
 
 package-deb: set-version package-base
 	mkdir target/model/linux-x86-deb
 	mkdir target/model/linux-x86-deb/usr
 	mkdir target/model/linux-x86-deb/usr/bin
-	install -m 755 jx target/model/linux-x86-deb/usr/bin/jx
-	fpm -s dir -t deb -n jx -v $(VERSION) -p target/package -C target/model/linux-x86-deb .
+	install -m 755 $(CMD) target/model/linux-x86-deb/usr/bin/$(CMD)
+	fpm -s dir -t deb -n $(CMD) -v $(VERSION) -p target/package -C target/model/linux-x86-deb .
 
