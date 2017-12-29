@@ -17,7 +17,6 @@ func main() {
 	app := cli.NewApp()
 	app.Usage = "Join dictionaries from JSON streams."
 	app.Version = version
-
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "input, i",
@@ -47,8 +46,11 @@ func main() {
 			Name:  "newline, n",
 			Usage: "End each expansion with a newline.",
 		},
+		cli.BoolFlag{
+			Name:  "html, strict-mustache",
+			Usage: "Use vanilla mustache expansions in the main template.",
+		},
 	}
-
 	app.Action = JxAction
 
 	err := app.Run(os.Args)
@@ -56,7 +58,6 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
 }
 
 func JxAction(c *cli.Context) {
@@ -78,7 +79,7 @@ func JxAction(c *cli.Context) {
 		os.Exit(127)
 	}
 
-	if err := expand(in, out, tmpl, c.Bool("newline")); err != nil {
+	if err := expand(in, out, tmpl, c.Bool("newline"), c.Bool("html")); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
@@ -169,13 +170,14 @@ func (f *staticWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
 
 type dynamicWriterFactory struct {
 	fnTmpl *mustache.Template // filename template
-	append bool				  // append to file rather than truncate
+	append bool		  // append to file rather than truncate
+	strictMustache bool       // use strict mustache expansion
 	fn     string             // path to current template
 	writer *os.File           // current writer
 }
 
 func (f *dynamicWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
-	fn := f.fnTmpl.Render(xpn)
+	fn := f.fnTmpl.Render(f.strictMustache, xpn)
 	if fn == f.fn {
 		return f.writer, nil
 	}
@@ -220,7 +222,7 @@ type dynamicTemplateFactory struct {
 }
 
 func (dtf *dynamicTemplateFactory) getTemplate(xpn interface{}) (*mustache.Template, error) {
-	fn := dtf.fnTmpl.Render(xpn)
+	fn := dtf.fnTmpl.Render(false, xpn)
 	if fn == dtf.fn {
 		return dtf.tmpl, nil
 	}
@@ -233,7 +235,7 @@ func (dtf *dynamicTemplateFactory) getTemplate(xpn interface{}) (*mustache.Templ
 }
 
 // expand combines JSON input with templates to produce output.
-func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, newline bool) error {
+func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, newline bool, strictMustache bool) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -253,7 +255,7 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, newli
 			return err
 		}
 
-		out.Write([]byte(tmpl.Render(j)))
+		out.Write([]byte(tmpl.Render(strictMustache, j)))
 		if newline {
 			out.Write([]byte("\n"))
 		}

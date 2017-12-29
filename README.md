@@ -140,5 +140,38 @@ The `-a` alters affects normal writes too:
         this is new
         >
 
-The templates are complete [mustache](https://mustache.github.io/) templates, with the full power that comes
-along with them, with *one* exception.  They don't perform HTML character escapes.
+Template Language
+-----------------
+
+By default JX uses modified [mustache](https://mustache.github.io/) templates.  It differs
+from normal mustache templates in the following ways:
+
+ * Simple expansions `{{x}}` do not perform HTML escaping.
+ * Simple expansions `{{x}}` of JSON structures produce embedded JSON.
+ * Unescaped expansions `{{{x}}}` behave exactly like normal expansions.
+
+You can obtain strict mustache semantics with the `--strict-mustache` option:
+
+        > echo '{"x": "&"}' | jx -n '{{x}}'
+        &
+        > echo '{"x": "&"}' | jx -n --strict-mustache '{{x}}'
+        &amp;
+        >
+
+This includes the strange processing from the mustache library too:
+
+        > echo '{"x": {"y": "z"}}' | jx -n '{{x}}'
+        {"y":"z"}
+        > echo '{"x": {"y": "z"}}' | jx -n --strict-mustache '{{x}}'
+        map[y:z]
+        >
+
+Array lookup enhancements are still present when using `--strict-mustache`, so
+maybe it's not so strictly mustache:
+
+        > echo '["one", "two"]' | jx -n '{{2}}'
+        two
+        > echo '["one", "two"]' | jx -n '--strict-mustache {{2}}'
+        two
+        >
+
