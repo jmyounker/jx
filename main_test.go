@@ -33,7 +33,7 @@ func TestExpandInput(t *testing.T) {
 		assertNoError(t, err)
 		out := bytes.Buffer{}
 		outFact := &staticWriterFactory{&out}
-		assertNoError(t, expand(in, outFact, &staticTemplateFactory{tmpl}, true))
+		assertNoError(t, expand(in, outFact, &staticTemplateFactory{tmpl}, true, false))
 		if (out.String() != tc.want) {
 			t.Fatalf("Expected %q but got %q", tc.want, out.String())
 		}
