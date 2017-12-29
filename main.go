@@ -43,6 +43,10 @@ func main() {
 			Name:  "append, a",
 			Usage: "Append to file.",
 		},
+		cli.BoolFlag{
+			Name:  "newline, n",
+			Usage: "End each expansion with a newline.",
+		},
 	}
 
 	app.Action = JxAction
@@ -74,7 +78,7 @@ func JxAction(c *cli.Context) {
 		os.Exit(127)
 	}
 
-	if err := expand(in, out, tmpl); err != nil {
+	if err := expand(in, out, tmpl, c.Bool("newline")); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		os.Exit(1)
 	}
@@ -229,7 +233,7 @@ func (dtf *dynamicTemplateFactory) getTemplate(xpn interface{}) (*mustache.Templ
 }
 
 // expand combines JSON input with templates to produce output.
-func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error {
+func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, newline bool) error {
 	dec := json.NewDecoder(in)
 	var j interface{}
 	for {
@@ -250,7 +254,9 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory) error
 		}
 
 		out.Write([]byte(tmpl.Render(j)))
-		out.Write([]byte("\n"))
+		if newline {
+			out.Write([]byte("\n"))
+		}
 	}
         return nil
 }
