@@ -169,11 +169,11 @@ func (f *staticWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
 }
 
 type dynamicWriterFactory struct {
-	fnTmpl *mustache.Template // filename template
-	append bool		  // append to file rather than truncate
-	strictMustache bool       // use strict mustache expansion
-	fn     string             // path to current template
-	writer *os.File           // current writer
+	fnTmpl         *mustache.Template // filename template
+	append         bool               // append to file rather than truncate
+	strictMustache bool               // use strict mustache expansion
+	fn             string             // path to current template
+	writer         *os.File           // current writer
 }
 
 func (f *dynamicWriterFactory) getWriter(xpn interface{}) (io.Writer, error) {
@@ -260,5 +260,5 @@ func expand(in io.Reader, outFact writerFactory, tmplFact templateFactory, newli
 			out.Write([]byte("\n"))
 		}
 	}
-        return nil
+	return nil
 }

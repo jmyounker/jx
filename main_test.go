@@ -8,7 +8,7 @@ import (
 	"github.com/jmyounker/mustache"
 )
 
-var inputTests = []struct{in, tmpl, want string}{
+var inputTests = []struct{ in, tmpl, want string }{
 	{"", "foo", ""},
 	{"{}", "", "\n"},
 	{"{\"a\": \"foo\"}", "{{a}}", "foo\n"},
@@ -34,7 +34,7 @@ func TestExpandInput(t *testing.T) {
 		out := bytes.Buffer{}
 		outFact := &staticWriterFactory{&out}
 		assertNoError(t, expand(in, outFact, &staticTemplateFactory{tmpl}, true, false))
-		if (out.String() != tc.want) {
+		if out.String() != tc.want {
 			t.Fatalf("Expected %q but got %q", tc.want, out.String())
 		}
 	}

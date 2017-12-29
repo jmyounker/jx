@@ -1,7 +1,12 @@
 all: clean update build test
 
 PKG_VERS := github.com/jmyounker/vers
+
 CMD := jx
+PKG_NAME := jx
+
+GOFMT=gofmt -s 
+GOFILES=$(wildcard *.go)
 
 clean:
 	rm -rf $(CMD) target
@@ -38,6 +43,9 @@ endif
 install: set-prefix build
 	install -m 755 -o $(INSTALL_USER) -g $(INSTALL_GROUP) $(CMD) $(PREFIX)/bin/$(CMD)
 
+format:
+	$(GOFMT) -w $(GOFILES)
+
 package-base: test
 	mkdir target
 	mkdir target/model
@@ -49,19 +57,19 @@ package-osx: set-version package-base
 	mkdir target/model/osx/usr/local
 	mkdir target/model/osx/usr/local/bin
 	install -m 755 $(CMD) target/model/osx/usr/local/bin/$(CMD)
-	fpm -s dir -t osxpkg -n $(CMD) -v $(VERSION) -p target/package -C target/model/osx .
+	fpm -s dir -t osxpkg -n $(PKG_NAME) -v $(VERSION) -p target/package -C target/model/osx .
 
 package-rpm: set-version package-base
 	mkdir target/model/linux-x86-rpm
 	mkdir target/model/linux-x86-rpm/usr
 	mkdir target/model/linux-x86-rpm/usr/bin
 	install -m 755 $(CMD) target/model/linux-x86-rpm/usr/bin/$(CMD)
-	fpm -s dir -t rpm -n $(CMD) -v $(VERSION) -p target/package -C target/model/linux-x86-rpm .
+	fpm -s dir -t rpm -n $(PKG_NAME) -v $(VERSION) -p target/package -C target/model/linux-x86-rpm .
 
 package-deb: set-version package-base
 	mkdir target/model/linux-x86-deb
 	mkdir target/model/linux-x86-deb/usr
 	mkdir target/model/linux-x86-deb/usr/bin
 	install -m 755 $(CMD) target/model/linux-x86-deb/usr/bin/$(CMD)
-	fpm -s dir -t deb -n $(CMD) -v $(VERSION) -p target/package -C target/model/linux-x86-deb .
+	fpm -s dir -t deb -n $(PKG_NAME) -v $(VERSION) -p target/package -C target/model/linux-x86-deb .
 
