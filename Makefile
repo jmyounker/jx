@@ -30,7 +30,7 @@ ifeq ($(shell uname),Darwin)
 	$(eval INSTALL_GROUP := $(shell id -g)) 
 else
 	$(eval PREFIX := /usr)
-        $(eval INSTALL_USER := root)
+	$(eval INSTALL_USER := root)
 	$(eval INTALL_GROUP := root)
 endif
 endif
